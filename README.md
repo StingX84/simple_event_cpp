@@ -1,5 +1,7 @@
 # Simple Event C++
 
+![Workflow Status](https://github.com/StingX84/simple_event_cpp/actions/workflows/cmake-multi-platform.yml/badge.svg)
+
 A lightweight, header-only C++ event system with subscription lifetime management.
 
 ## Features
@@ -49,9 +51,9 @@ myClass.fireEventTest();
 ## Build
 
 ```bash
-cmake -B build
+cmake -G Ninja -B build
 cmake --build build
-./build/app
+./build/tests
 ```
 
 Example CMakeLists.txt requires CMake 3.20+ and a C++20-compatible compiler.
