@@ -120,7 +120,10 @@ public:
 
 	void swap(Event& o) noexcept { observer_.swap(o.observer_); }
 
-	/** Класс Observer позволяет подписываться на события */
+	/** Класс Observer позволяет подписываться на события.
+	 *
+	 * Единственный способ получения объекта Observer - через метод `observer()` класса Event.
+	 */
 	class Observer
 	{
 	public:
@@ -133,12 +136,12 @@ public:
 		 * @return Объект, сохраняющий подписку. Когда объект уничтожается, подписка
 		 * автоматически отменяется.
 		 */
-		template<EVENT_HANDLER_CONCEPT F> EventSubscription subscribe(F fn, int weight = 100) noexcept
+		template<EVENT_HANDLER_CONCEPT F> EventSubscription subscribe(F&& fn, int weight = 100) noexcept
 		{
 			auto it = std::find_if(subscribers_.begin(), subscribers_.end(),
 								   [weight](const std::shared_ptr<Entry>& e) { return e->weight_ < weight; });
 
-			auto entry = std::make_shared<EntryCallable<F>>(*this, subscribers_.end(), weight, std::move(fn));
+			auto entry = std::make_shared<EntryCallable<F>>(*this, weight, std::forward<F>(fn));
 			if (it == subscribers_.end())
 			{
 				subscribers_.push_back(std::move(entry));
@@ -173,8 +176,8 @@ public:
 		/** Внутренняя структура Entry хранения информацию о подписке с возможностью вызова подписчика. */
 		struct Entry: EventSubscription::UntypedEntry
 		{
-			Entry(Observer& observer, typename EntryList::iterator entryIt, int weight) noexcept
-				: observer_(observer), entryIt_(entryIt), weight_(weight)
+			Entry(Observer& observer, int weight) noexcept
+				: observer_(observer), entryIt_(observer_.subscribers_.end()), weight_(weight)
 			{}
 
 			virtual ~Entry() override = default;
@@ -203,8 +206,8 @@ public:
 		 * пользовательским функтором. Избавляет от необходимости использования std::function. */
 		template<class F> struct EntryCallable final: Entry
 		{
-			EntryCallable(Observer& observer, typename EntryList::iterator it, int weight, F fn) noexcept
-				: Entry {observer, it, weight}, fn_(std::forward<F>(fn))
+			EntryCallable(Observer& observer, int weight, F&& fn) noexcept
+				: Entry {observer, weight}, fn_(std::forward<F>(fn))
 			{}
 
 			virtual ~EntryCallable() override = default;
