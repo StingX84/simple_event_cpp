@@ -2,6 +2,7 @@
 #include <cassert>
 #include <list>
 #include <memory>
+#include <type_traits>
 
 /** Класс EventSubscription - управляет временем жизни подписки на событие из Event.
  *
@@ -65,10 +66,12 @@ private:
 };
 
 #if defined(__cpp_concepts)
-/** Концепт EventHandlerConcept проверяет, что тип F является вызываемым с аргументами TArgs&... и возвращает bool */
+/** Концепт EventHandlerConcept проверяет, что тип F является вызываемым с аргументами TArgs&... и возвращает bool или
+ * void */
 template<typename F, typename... TArgs>
-concept EventHandlerConcept
-	= std::invocable<F, TArgs&...> && std::convertible_to<std::invoke_result_t<F, TArgs&...>, bool>;
+concept EventHandlerConcept = std::invocable<F, TArgs&...>
+						   && (std::convertible_to<std::invoke_result_t<F, TArgs&...>, bool>
+							   || std::convertible_to<std::invoke_result_t<F, TArgs&...>, void>);
 #	define EVENT_HANDLER_CONCEPT EventHandlerConcept<TArgs...>
 #else
 #	define EVENT_HANDLER_CONCEPT class
@@ -127,16 +130,15 @@ public:
 	class Observer
 	{
 	public:
-
 		/** Подписывает на событие с функцией обратного вызова и приоритетом (весом).
 		 * @tparam F Тип функции обратного вызова.
-		 * @param fn Функция обратного вызова. Сигнатура функции должна быть
-		 * совместима с `bool(TArgs&...)`.
 		 * @param weight Приоритет (вес) подписки. Чем больше вес, тем выше приоритет.
+		 * @param fn Функция обратного вызова. Сигнатура функции должна быть
+		 * совместима с `bool(TArgs&...)` или `void(TArgs&...)`.
 		 * @return Объект, сохраняющий подписку. Когда объект уничтожается, подписка
 		 * автоматически отменяется.
 		 */
-		template<EVENT_HANDLER_CONCEPT F> EventSubscription subscribe(F&& fn, int weight = 100) noexcept
+		template<EVENT_HANDLER_CONCEPT F> EventSubscription subscribe(int weight, F&& fn) noexcept
 		{
 			auto it = std::find_if(subscribers_.begin(), subscribers_.end(),
 								   [weight](const std::shared_ptr<Entry>& e) { return e->weight_ < weight; });
@@ -155,6 +157,18 @@ public:
 				(*itNewEntry)->entryIt_ = itNewEntry;
 				return {*itNewEntry};
 			}
+		}
+
+		/** Подписывает на событие с функцией обратного вызова и приоритетом по умолчанию = 100.
+		 * @tparam F Тип функции обратного вызова.
+		 * @param fn Функция обратного вызова. Сигнатура функции должна быть
+		 * совместима с `bool(TArgs&...)` или `void(TArgs&...)`.
+		 * @return Объект, сохраняющий подписку. Когда объект уничтожается, подписка
+		 * автоматически отменяется.
+		 */
+		template<EVENT_HANDLER_CONCEPT F> EventSubscription subscribe(F&& fn) noexcept
+		{
+			return subscribe<F>(100, std::forward<F>(fn));
 		}
 
 		/** Возвращает @c true, если есть хотя бы один подписчик на событие, иначе @c false. */
@@ -206,15 +220,30 @@ public:
 		 * пользовательским функтором. Избавляет от необходимости использования std::function. */
 		template<class F> struct EntryCallable final: Entry
 		{
+#if defined(__cpp_lib_is_invocable)
+			using is_void = std::is_void<std::invoke_result_t<F, TArgs&...>>; // C++17 и выше
+#else
+			using is_void = std::is_void<typename std::result_of<F(TArgs&...)>::type>; // C++11 - C++14
+#endif
+
 			EntryCallable(Observer& observer, int weight, F&& fn) noexcept
 				: Entry {observer, weight}, fn_(std::forward<F>(fn))
 			{}
 
 			virtual ~EntryCallable() override = default;
 
-			virtual bool operator() (TArgs&... args) override { return fn_(args...); }
+			virtual bool operator() (TArgs&... args) override { return call(is_void {}, args...); }
 
 			F fn_;
+
+		private:
+			bool call(std::true_type, TArgs&... args)
+			{
+				fn_(args...);
+				return true;
+			}
+
+			bool call(std::false_type, TArgs&... args) { return fn_(args...); }
 		};
 
 		friend struct Entry;

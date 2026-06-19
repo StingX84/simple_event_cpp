@@ -3,8 +3,6 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include "doctest/doctest.h"
 
-#include <string_view>
-
 // ============================================================================
 //  Helper class
 // ============================================================================
@@ -16,7 +14,7 @@ public:
 
 	Event<int&>::Observer& eventInt() const { return eventInt_.observer(); }
 
-	Event<std::string_view>::Observer& eventString() const { return eventString_.observer(); }
+	Event<const std::string&>::Observer& eventString() const { return eventString_.observer(); }
 
 	void fireSimpleAndStringEvents() const
 	{
@@ -33,7 +31,7 @@ public:
 private:
 	Event<> eventSimple_;
 	Event<int&> eventInt_;
-	Event<std::string_view> eventString_;
+	Event<const std::string&> eventString_;
 };
 
 // ============================================================================
@@ -161,50 +159,40 @@ TEST_CASE("Subscribe, fire, and unsubscribe")
 		bool called1 = false;
 		bool called2 = false;
 		bool called3 = false;
-		bool called4 = false;
 		auto sub1 = test.eventSimple().subscribe([&]()
 		{
 			CHECK(!called1);
 			called1 = true;
-			return true;
 		});
 
-		const auto sub2 = test.eventString().subscribe([&](std::string_view message)
+		const auto sub2 = test.eventString().subscribe([&](const std::string& message)
 		{
 			CHECK(!called2);
 			CHECK(message == "Hello, World!");
 			called2 = true;
-			return true;
 		});
 
-		const auto sub3 = test.eventString().subscribe([&](std::string_view message)
+		const auto sub3 = test.eventString().subscribe([&](const std::string& message)
 		{
 			CHECK(!called3);
 			CHECK(message == "Hello, World!");
 			called3 = true;
-			return true;
 		});
 
-		const auto sub4 = test.eventInt().subscribe([&](int)
-		{
-			called4 = true;
-			return true;
-		});
+		const auto sub4 = test.eventInt().subscribe([&](int) { FAIL("This subscriber should not be called"); });
 
 		test.fireSimpleAndStringEvents();
 		CHECK(called1);
 		CHECK(called2);
 		CHECK(called3);
-		CHECK(!called4);
 
 		sub1.reset();
 
-		called1 = called2 = called3 = called4 = false;
+		called1 = called2 = called3 = false;
 		test.fireSimpleAndStringEvents();
 		CHECK(!called1);
 		CHECK(called2);
 		CHECK(called3);
-		CHECK(!called4);
 	} // sub2, sub3, sub4 go out of scope here — automatically unsubscribed
 
 	CHECK(!test.eventString().hasSubscribers());
@@ -226,22 +214,22 @@ TEST_CASE("Event priority and parameter modification")
 		return true;
 	}); // default (low) priority, called last
 
-	const auto sub6 = test.eventInt().subscribe([&](int& value)
+	const auto sub6 = test.eventInt().subscribe(150, [&](int& value)
 	{
 		CHECK_EQ(value, 42);
 		CHECK_EQ(eventIndex, 1);
 		value = 999;
 		++eventIndex;
 		return true;
-	}, 150); // medium priority, called second
+	}); // medium priority, called second
 
-	const auto sub7 = test.eventInt().subscribe([&](int value)
+	const auto sub7 = test.eventInt().subscribe(200, [&](int value)
 	{
 		CHECK_EQ(value, 42);
 		CHECK_EQ(eventIndex, 0);
 		++eventIndex;
 		return true;
-	}, 200); // high priority, called first
+	}); // high priority, called first
 
 	test.fireIntEvent();
 }

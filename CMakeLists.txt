@@ -12,8 +12,6 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 enable_testing()
 
 set(DOCTEST_WITH_MAIN_IN_STATIC_LIB OFF)
-set(DOCTEST_NO_INSTALL ON)
-set(DOCTEST_USE_STD_HEADERS ON)
 include(FetchContent)
 FetchContent_Declare(
     doctest

@@ -19,31 +19,37 @@ A lightweight, header-only C++ event system with subscription lifetime managemen
 ```cpp
 #include "Event.h"
 
-#include <string>
+#include <string_view>
 
 class MyClassProvidingEvent {
 public:
     /// Expose event Observer to subscribers!
     auto& eventTest() const noexcept { return eventTest_.observer(); }
+    auto& eventWithData() const noexcept { return eventWithData_.observer(); }
 
-    void fireEventTest()
+    void fireEvents()
     {
-        eventTest_.fire("Hello world!");
+        eventTest_.fire();
+        eventWithData_.fire("Your answer", 42);
     }
 private:
-    Event<const std::string&> eventTest_;
+    Event<> eventTest_;
+    Event<std::string_view, int> eventWithData_;
 };
 
 MyClassProvidingEvent myClass;
 
 // Subscribe
-const auto sub = myClass.eventTest().subscribe([](const std::string& msg) {
-    std::cout << msg << std::endl;
-    return true; // continue dispatching
+const auto sub1 = myClass.eventTest().subscribe([]() {
+    std::cout << "Simple event received" << std::endl;
+});
+
+const auto sub2 = myClass.eventWithData().subscribe([](std::string_view d1, int d2) {
+    std::cout << "Event with data received: " << d1 << ", " << d2 << std::endl;
 });
 
 // Fire
-myClass.fireEventTest();
+myClass.fireEvents();
 
 // Subscription auto-unsubscribes when `sub` goes out of scope
 ```
